@@ -38,4 +38,4 @@ Put photos in an `images/` folder and add `"image": "images/iphone-16-pro-max.jp
 - Turn on **Enforce HTTPS** in GitHub Pages once the domain is connected.
 
 ## Hosting
-GitHub Pages: Settings → Pages → Deploy from a branch → `main` / root. The `CNAME` file sets the domain to `nainezz.co.ke`.
+GitHub Pages: Settings → Pages → Deploy from a branch → `main` / root. When you connect nainezz.co.ke, enter it under Custom domain (GitHub adds a `CNAME` file).
