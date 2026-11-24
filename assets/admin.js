@@ -157,6 +157,7 @@ function watchProducts() {
     products = s.docs.map(d => ({ slug: d.id, ...d.data() }))
       .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999) || String(a.name).localeCompare(b.name));
     renderProducts();
+    $('#importBtn').hidden = products.length > 0;
     $('#brandList').replaceChildren(...[...new Set(products.map(p => p.brand).filter(Boolean))].map(b => el('option', { value: b })));
   }, e => toast('Could not load products: ' + e.code)));
   $('#pq').oninput = renderProducts;
@@ -199,6 +200,7 @@ function setupImport() {
   const btn = $('#importBtn');
   let armed = false, t;
   btn.onclick = async () => {
+    if (products.length) { toast('Products are already in Firebase — edit them here instead of importing again.'); return; }
     if (!armed) {
       armed = true; btn.textContent = products.length ? 'Tap again: overwrite matching products' : 'Tap again to import';
       t = setTimeout(() => { armed = false; btn.textContent = 'Import from products.json'; }, 5000);
@@ -216,7 +218,8 @@ function setupImport() {
           stock: null, active: true, order: i, updatedAt: F.serverTimestamp()
         });
       });
-      batch.set(F.doc(db, 'settings', 'site'), data.site, { merge: true });
+      const cur = await F.getDoc(F.doc(db, 'settings', 'site'));
+      if (!cur.exists()) batch.set(F.doc(db, 'settings', 'site'), data.site); // never overwrite saved shop details
       await batch.commit();
       toast(`Imported ${data.products.length} products`);
     } catch (e) { toast('Import failed: ' + (e.code || e.message)); }
