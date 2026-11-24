@@ -1,20 +1,41 @@
 # Nainezz Phone Shop
 
-Website for the Nainezz phone shop in Nairobi — phones, tablets, laptops, audio and accessories, with ordering on WhatsApp.
+Multi-page website for the Nainezz phone shop in Nairobi — phones, tablets, laptops, audio, smartwatches and accessories, with ordering on WhatsApp.
 
-## Features
-- Category tabs, brand filter and live search
-- Rotating hero banner and a "Deals of the week" row
-- Cart with quantities, saved in the browser
-- One-tap WhatsApp ordering per product, and a full cart order sent as one WhatsApp message
-- Works on phones, light and dark mode
+## Pages
+- **Home** — hero slider, visit-the-shop bar, category and brand tiles, deals carousel, Power Picks tabs, a section per category, popular searches
+- **Category pages** (`category/…`) — with brand filter, search and sorting; the header menu links straight to a brand within a category
+- **Brand pages** (`brand/…`)
+- **Product pages** (`product/…`) — storage/size options with their own prices, WhatsApp order, add to cart, call to order, specifications, related products
+- **Shop** (all products + site search), **Deals**, **Cart** (sends the full order on WhatsApp), **Trade in**, **Contact** (delivery and returns policies), **404**
+- `sitemap.xml` and `robots.txt` for Google
 
-## Setup
-Everything is in `index.html` — no build step.
+## How to update products, prices or contact details
+Everything comes from **`data/products.json`**:
+- `site` — shop name, phone number, WhatsApp number (`wa`: country code first, no `+`), email, address, hours, map link
+- `categories` — the menu categories
+- `products` — each product: `variants` is a list of `[option, price]` or `[option, price, old price]`
+- `slides` — the home page banner
+- `popular` — popular search links
 
-1. Set your WhatsApp number in the `WA` constant at the top of the script (country code first, no `+`, e.g. `2547XXXXXXXX`).
-2. Replace the placeholder phone number `0700 000 000` and the shop address in the page.
-3. Edit the `P` array in the script with your real products and prices (the current ones are samples).
+Then rebuild the pages and commit:
+
+```bash
+python3 build.py
+git add -A && git commit -m "Update products" && git push
+```
+
+No packages needed — plain Python 3.
+
+### Real product photos
+Put photos in an `images/` folder and add `"image": "images/iphone-16-pro-max.jpg"` to the product. Pages use the photo instead of the drawing.
+
+## Security
+- Static site: no server, database, login or payments to attack — orders go through WhatsApp.
+- Content Security Policy on every page: only the site's own scripts can run.
+- All shop text is escaped when pages are built; the cart and forms write text with `textContent`, never as HTML.
+- Cart data read back from the browser is checked and capped before use.
+- Turn on **Enforce HTTPS** in GitHub Pages once the domain is connected.
 
 ## Hosting
-Turn on **GitHub Pages** (Settings → Pages → Deploy from branch → `main` / root), then point `nainezz.co.ke` at it with a `CNAME` record.
+GitHub Pages: Settings → Pages → Deploy from a branch → `main` / root. The `CNAME` file sets the domain to `nainezz.co.ke`.
