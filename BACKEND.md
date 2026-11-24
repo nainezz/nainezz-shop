@@ -1,11 +1,33 @@
-# Backend setup (Firebase + M-Pesa)
+# Backend setup (Firebase)
 
-The website works without this — orders just go to WhatsApp. Once you finish these steps you get:
+The website works without this — orders just go to WhatsApp. There are two levels:
 
-- **Admin page** (`/admin.html`): change prices and stock, hide products, add new ones with photos, edit shop details.
-- **Orders saved** in a database, with a dashboard: orders today, money in today / this month, orders to deliver.
-- **M-Pesa payments**: customers get the STK prompt on their phone; the order turns *Paid* by itself.
+**Free plan (Spark) — no card needed. This is the current setup.**
+- **Admin page** (`/admin.html`): prices, stock, hide/add products, shop details.
+- **Orders saved** with a dashboard (orders today, money in today / this month, orders to deliver).
 - **Live prices and stock** on the website; sold-out items can't be added to the cart.
+- Stock goes down when you mark an order **Paid** or **Delivered**, and back up if you mark it **Cancelled**.
+- Customers pay on delivery; each order still goes to you on WhatsApp to confirm.
+- Photos: put them in the `images/` folder of the repo and type the name in the admin page.
+
+**Paid plan (Blaze) — later, for M-Pesa on the website.** Adds STK push payments that mark orders Paid automatically,
+server-side price checks and photo uploads. Steps are under *Later: M-Pesa* below.
+
+## Free plan setup
+1. **Firebase project** (done): Firestore database, Authentication with Email/Password and your admin user.
+2. **Connect the website**: Project settings → General → Your apps → Web `</>` → register an app (no hosting) →
+   copy the config values into `assets/firebase-config.js` (or send them to Claude to do it). Leave `payments: false`.
+3. **Security rules**: Firebase console → Firestore Database → **Rules** tab → delete what's there, paste the whole of
+   [`firestore.rules`](firestore.rules) → **Publish**. (No command line needed.)
+4. **Make yourself admin**: open `/admin.html` on your site, sign in. It shows *“This account isn’t an admin”* and your user ID.
+   Firestore → **Start collection** `admins` → Document ID = your user ID → add a field `name` = your name → Save. Reload.
+5. **Load products**: admin page → Products & stock → **Import from products.json** (tap twice). Then fill in **Shop details**.
+6. **Publish**: GitHub repo → Settings → Pages → Source: **GitHub Actions**.
+
+### Free plan: what to know
+- Customers' browsers write orders directly, so the rules only accept a new order in the exact expected shape
+  (status *New*, pay on delivery, limited sizes). Always confirm the price on WhatsApp before delivering — as you do now.
+- The free plan allows about 20,000 writes and 50,000 reads a day — far more than a small shop needs.
 
 ## What's where
 | File | What it does |
@@ -17,6 +39,10 @@ The website works without this — orders just go to WhatsApp. Once you finish t
 | `functions/.env` | M-Pesa settings (sandbox or live, paybill or till) |
 | `firestore.rules`, `storage.rules` | Who may read/write what — the main security layer |
 | `.github/workflows/deploy.yml` | Rebuilds and publishes the site (on every push and every 6 hours) |
+
+# Later: M-Pesa (paid Blaze plan)
+
+When you're ready for M-Pesa on the site, do these steps, then set `payments: true` in `assets/firebase-config.js`.
 
 ## 1. Create the Firebase project
 1. Go to <https://console.firebase.google.com> → **Add project** → name it e.g. `nainezz-shop` (Google Analytics: optional).

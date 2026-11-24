@@ -2,7 +2,8 @@ rules_version = '2';
 // Who can do what in the database.
 // - Anyone can read products and shop settings (the website needs them).
 // - Only admins (users listed in the "admins" collection) can change products and settings, and see orders.
-// - Orders are created only by the createOrder Cloud Function (which bypasses these rules), never by browsers.
+// - Customers' browsers may create an order (status "new", pay on delivery) but never read or change orders.
+//   With the paid plan + Cloud Functions, M-Pesa orders are created by the createOrder function instead.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
@@ -27,13 +28,28 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    function str(v, max) { return v is string && v.size() <= max; }
+    function validNewOrder() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['ref', 'items', 'total', 'pay', 'status', 'stockDeducted', 'name', 'phone', 'area', 'notes', 'createdAt'])
+        && d.keys().hasAll(['ref', 'items', 'total', 'pay', 'status', 'stockDeducted', 'phone', 'createdAt'])
+        && d.ref is string && d.ref.matches('^[A-Z0-9]{6}$')
+        && d.items is list && d.items.size() > 0 && d.items.size() <= 20
+        && d.total is int && d.total >= 0 && d.total <= 20000000
+        && d.pay == 'whatsapp' && d.status == 'new' && d.stockDeducted == false
+        && d.phone is string && d.phone.matches('^[+0-9]{9,16}$')
+        && (!('name' in d) || str(d.name, 60)) && (!('area' in d) || str(d.area, 100)) && (!('notes' in d) || str(d.notes, 300))
+        && d.createdAt == request.time;
+    }
+
     match /orders/{id} {
+      allow create: if validNewOrder();
       allow read: if isAdmin();
-      // Admins may only change the status and their own note.
+      // Admins may only change the status, their note, and the stock flag.
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'adminNote', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'adminNote', 'updatedAt', 'stockDeducted'])
         && request.resource.data.status in ['new', 'awaiting_payment', 'paid', 'delivered', 'cancelled', 'payment_failed'];
-      allow create, delete: if false;
+      allow delete: if false;
     }
 
     match /admins/{uid} {

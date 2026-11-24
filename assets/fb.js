@@ -3,7 +3,8 @@ import cfg from './firebase-config.js';
 
 const VERSION = '10.14.1';
 const CDN = `https://www.gstatic.com/firebasejs/${VERSION}/`;
-const { functionsRegion = 'europe-west1', ...config } = cfg || {};
+const { functionsRegion = 'europe-west1', payments = false, ...config } = cfg || {};
+export const paymentsOn = payments === true;
 
 export const ready = typeof config.apiKey === 'string' && config.apiKey.length > 20 && !/PASTE/.test(config.apiKey)
   && /^[a-z0-9-]+$/.test(config.projectId || '') && config.projectId !== 'your-project-id';

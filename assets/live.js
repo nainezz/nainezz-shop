@@ -1,6 +1,6 @@
 // Live prices + stock from Firestore, and checkout through Cloud Functions (orders + M-Pesa).
 // Does nothing until assets/firebase-config.js is filled in.
-import { ready, firestore, functions } from './fb.js';
+import { ready, paymentsOn, firestore, functions } from './fb.js';
 
 const body = document.body;
 const SHOP = body.dataset.shop || 'Nainezz';
@@ -88,9 +88,51 @@ function waButton(box, label, msg) {
   box.appendChild(a);
 }
 
+// Free plan: the order is written straight to Firestore (rules check its shape), then sent on WhatsApp.
+function orderRef() {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const r = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(r, x => abc[x % abc.length]).join('');
+}
+function setupDirectCheckout(form) {
+  const btn = $('#checkoutBtn'), err = $('#checkoutErr');
+  window.NZ_CHECKOUT = async d => {
+    err.hidden = true;
+    const phone = d.phone.replace(/[\s-]/g, '');
+    if (!/^(?:\+?254|0)?[17]\d{8}$/.test(phone)) {
+      err.textContent = 'Add your phone number so we can confirm the order, e.g. 0712 345 678.'; err.hidden = false;
+      form.elements.phone.focus(); return;
+    }
+    btn.disabled = true;
+    statusBox('Placing your order…');
+    const ref = orderRef();
+    const items = d.items.slice(0, 20).map(x => ({ slug: String(x.slug).slice(0, 80), name: String(x.name).slice(0, 120),
+      variant: String(x.variant || '').slice(0, 60), price: Math.round(num(x.price)), qty: Math.min(20, Math.max(1, Math.round(num(x.qty)))) }));
+    const total = items.reduce((s, x) => s + x.price * x.qty, 0);
+    try {
+      const { m, db } = await firestore();
+      await m.addDoc(m.collection(db, 'orders'), {
+        ref, items, total, pay: 'whatsapp', status: 'new', stockDeducted: false,
+        name: d.name.slice(0, 60), phone: phone.slice(0, 16), area: d.area.slice(0, 100), notes: d.notes.slice(0, 300),
+        createdAt: m.serverTimestamp()
+      });
+    } catch (e) {
+      console.warn('Order not saved online', e);
+      const box = statusBox('We couldn’t save the order online, but you can send it to us on WhatsApp.', 'bad');
+      waButton(box, 'Send order on WhatsApp', d.msg);
+      btn.disabled = false;
+      return;
+    }
+    NZ().clearCart();
+    const box = statusBox(`Order #${ref} received — total ${ksh(total)}. Send it to us on WhatsApp and we’ll confirm the price and delivery.`, 'good');
+    waButton(box, 'Send order on WhatsApp', `Order #${ref}\n` + d.msg);
+  };
+}
+
 function setupCheckout() {
   const form = $('#checkoutForm');
   if (!form) return;
+  if (!paymentsOn) { setupDirectCheckout(form); return; }
   const choice = $('#payChoice'), label = $('#checkoutLabel'), btn = $('#checkoutBtn'), err = $('#checkoutErr');
   choice.hidden = false;
   const sync = () => {

@@ -115,8 +115,8 @@
       <div class="photo"><div class="thumb" id="thumb"></div><div>
         <label class="btn sm ghostd file">Upload photo<input type="file" id="photo" accept="image/jpeg,image/png,image/webp"></label>
         <button type="button" class="btn sm ghostd" id="rmPhoto">Remove photo</button>
-        <p class="fine">JPG, PNG or WebP under 3 MB. Square photos on a white background look best.</p>
-        <input type="hidden" name="image">
+        <label>Photo file or link<input name="image" maxlength="300" placeholder="images/iphone-16-pro-max.jpg"></label>
+        <p class="fine">Free plan: put the photo in the <b>images</b> folder of your GitHub repo and type its name here, e.g. <code>images/iphone-16.jpg</code>. Square photos on a white background look best. (Upload needs Firebase Storage.)</p>
       </div></div>
 
       <h3>Website look</h3>

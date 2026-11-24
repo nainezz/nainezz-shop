@@ -20,6 +20,7 @@ let toastT;
 function toast(t) { const n = $('#toast'); n.textContent = t; n.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => n.classList.remove('on'), 2600); }
 const STATUS = { new: 'New', awaiting_payment: 'Awaiting payment', paid: 'Paid', delivered: 'Delivered', cancelled: 'Cancelled', payment_failed: 'Payment failed' };
 const CATS = [['smartphones', 'Smartphones'], ['tablets', 'Tablets & iPads'], ['laptops', 'Laptops'], ['audio', 'Audio'], ['smartwatches', 'Smartwatches'], ['accessories', 'Accessories']];
+const PHOTO = /^(https:\/\/|images\/)[^\s"'<>]+$/;
 const slugify = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
 
 let F, db, A, auth, unsub = [];
@@ -71,7 +72,7 @@ function startApp() {
 let orders = [];
 function watchOrders() {
   const q = F.query(F.collection(db, 'orders'), F.orderBy('createdAt', 'desc'), F.limit(300));
-  unsub.push(F.onSnapshot(q, s => { orders = s.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() })); renderOrders(); },
+  unsub.push(F.onSnapshot(q, s => { orders = s.docs.map(d => { const x = d.data(); return { ...x, id: d.id, code: x.ref, ref: d.ref }; }); renderOrders(); },
     e => toast('Could not load orders: ' + e.code)));
   $('#oq').oninput = renderOrders; $('#ofilter').onchange = renderOrders;
 }
@@ -91,18 +92,20 @@ function renderOrders() {
 
   const words = $('#oq').value.toLowerCase().split(/\s+/).filter(Boolean);
   const st = $('#ofilter').value;
-  const list = orders.filter(o => (!st || o.status === st) && words.every(w => `#${o.number} ${o.name} ${o.phone} ${o.area}`.toLowerCase().includes(w)));
+  const list = orders.filter(o => (!st || o.status === st) && words.every(w => `#${o.number ?? o.code} ${o.name} ${o.phone} ${o.area}`.toLowerCase().includes(w)));
   const tb = $('#orders tbody');
   tb.replaceChildren(...list.map(o => {
-    const sel = el('select', { 'aria-label': `Status of order ${o.number}`, onchange: async e => {
-      try { await F.updateDoc(o.ref, { status: e.target.value, updatedAt: F.serverTimestamp() }); toast(`Order #${o.number}: ${STATUS[e.target.value]}`); }
-      catch (ex) { toast('Not saved: ' + ex.code); e.target.value = o.status; }
+    const no = o.number ?? o.code;
+    const sel = el('select', { 'aria-label': `Status of order ${no}`, onchange: async e => {
+      try { await setStatus(o, e.target.value); toast(`Order #${no}: ${STATUS[e.target.value]}`); }
+      catch (ex) { toast('Not saved: ' + (ex.code || ex.message)); e.target.value = o.status; }
     } }, Object.entries(STATUS).map(([v, l]) => el('option', { value: v, selected: v === o.status }, l)));
     const when = o.createdAt ? o.createdAt.toDate().toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : '';
-    const waLink = o.phone ? el('a', { href: `https://wa.me/${o.phone}?text=${encodeURIComponent(`Hi ${o.name || ''}, this is Nainezz about your order #${o.number}.`)}`, target: '_blank', rel: 'noopener' }, 'WhatsApp') : '';
+    const intl = String(o.phone || '').replace(/\D/g, '').replace(/^0/, '254');
+    const waLink = intl ? el('a', { href: `https://wa.me/${intl}?text=${encodeURIComponent(`Hi ${o.name || ''}, this is Nainezz about your order #${no}.`)}`, target: '_blank', rel: 'noopener' }, 'WhatsApp') : '';
     return el('tr', { class: o.status === 'cancelled' || o.status === 'payment_failed' ? 'dim' : '' },
-      el('td', {}, el('b', { text: '#' + o.number }), el('small', { text: when })),
-      el('td', {}, o.name || '—', el('small', {}, o.phone ? '0' + o.phone.slice(3) + ' · ' : '', waLink), el('small', { text: o.area || '' }), o.notes ? el('small', { text: '“' + o.notes + '”' }) : ''),
+      el('td', {}, el('b', { text: '#' + no }), el('small', { text: when })),
+      el('td', {}, o.name || '—', el('small', {}, intl ? '0' + intl.slice(3) + ' · ' : '', waLink), el('small', { text: o.area || '' }), o.notes ? el('small', { text: '“' + o.notes + '”' }) : ''),
       el('td', {}, (o.items || []).map(i => el('div', { text: `${i.qty} × ${i.name}${i.variant ? ' (' + i.variant + ')' : ''}` }))),
       el('td', { class: 'r' }, el('b', { text: ksh(o.total) })),
       el('td', {}, o.pay === 'mpesa' ? 'M-Pesa' : 'On delivery', el('small', { text: o.mpesaReceipt || o.paymentError || '' })),
@@ -110,6 +113,34 @@ function renderOrders() {
     );
   }));
   $('#noOrders').hidden = list.length > 0;
+}
+
+/**
+ * Changes an order's status and keeps stock right: items come off stock when an order becomes
+ * Paid or Delivered, and go back if it's Cancelled. The stockDeducted flag stops it happening twice.
+ */
+const SOLD = ['paid', 'delivered'];
+async function setStatus(o, status) {
+  await F.runTransaction(db, async t => {
+    const cur = (await t.get(o.ref)).data();
+    const sell = SOLD.includes(status) && !cur.stockDeducted;
+    const restore = status === 'cancelled' && cur.stockDeducted;
+    const upd = { status, updatedAt: F.serverTimestamp() };
+    if (sell || restore) {
+      const qty = {};
+      for (const it of cur.items || []) if (/^[a-z0-9-]{1,80}$/.test(it.slug || '')) qty[it.slug] = (qty[it.slug] || 0) + (Number(it.qty) || 0);
+      const refs = Object.keys(qty).map(s => F.doc(db, 'products', s));
+      const snaps = [];
+      for (const r of refs) snaps.push(await t.get(r));
+      snaps.forEach((s, i) => {
+        const stock = s.exists() ? s.data().stock : null;
+        if (typeof stock !== 'number') return; // not tracked
+        t.update(refs[i], { stock: Math.max(0, stock + qty[refs[i].id] * (sell ? -1 : 1)), updatedAt: F.serverTimestamp() });
+      });
+      upd.stockDeducted = sell;
+    }
+    t.update(o.ref, upd);
+  });
 }
 
 /* ---------------- products ---------------- */
@@ -214,7 +245,7 @@ function openEditor(p) {
   E.brand.value = p?.brand || ''; E.cat.value = p?.cat || 'smartphones'; E.badge.value = p?.badge || '';
   E.stock.value = typeof p?.stock === 'number' ? p.stock : ''; E.active.checked = p ? p.active !== false : true;
   E.desc.value = p?.desc || ''; E.art.value = p?.art || 'phone'; E.color.value = /^#[0-9a-f]{6}$/i.test(p?.color || '') ? p.color : '#9fb7d6';
-  E.image.value = p?.image || ''; setThumb(p?.image && p.image.startsWith('https://') ? p.image : (p?.image || ''));
+  E.image.value = p?.image || ''; setThumb(p?.image || '');
   $$('input[name=picks]', f).forEach(c => { c.checked = (p?.picks || []).includes(c.value); });
   $('#variants').replaceChildren(...((p?.variants?.length ? p.variants : [{}]).map(variantRow)));
   $('#specs').replaceChildren(...Object.entries(p?.specs || {}).map(([k, v]) => specRow(k, v)));
@@ -230,6 +261,7 @@ function setupEditor() {
   $('#addSpec').onclick = () => $('#specs').append(specRow());
   $('#edClose').onclick = $('#edCancel').onclick = () => dlg.close();
   $('#rmPhoto').onclick = () => { E.image.value = ''; setThumb(''); };
+  E.image.addEventListener('change', () => setThumb(PHOTO.test(E.image.value.trim()) ? E.image.value.trim() : ''));
   $('#photo').onchange = async e => {
     const file = e.target.files[0]; e.target.value = '';
     if (!file) return;
@@ -242,7 +274,7 @@ function setupEditor() {
       const r = S.ref(st, `products/${slug}/${Date.now()}.${ext}`);
       await S.uploadBytes(r, file, { contentType: file.type, cacheControl: 'public,max-age=31536000' });
       E.image.value = await S.getDownloadURL(r); setThumb(E.image.value); toast('Photo uploaded — save the product to keep it');
-    } catch (ex) { toast('Upload failed: ' + (ex.code || ex.message)); }
+    } catch (ex) { toast('Upload needs Firebase Storage. Put the photo in the images folder on GitHub and type its name instead.'); }
   };
   let delArmed = false;
   $('#edDelete').onclick = async () => {
@@ -270,7 +302,8 @@ function setupEditor() {
     const data = {
       name: E.name.value.trim(), brand: E.brand.value.trim() || 'Other', cat: E.cat.value, badge: E.badge.value || null,
       stock: stockRaw === '' ? null : Math.max(0, parseInt(stockRaw, 10) || 0), active: E.active.checked,
-      desc: E.desc.value.trim(), art: E.art.value, color: E.color.value, image: E.image.value || null,
+      desc: E.desc.value.trim(), art: E.art.value, color: E.color.value,
+      image: PHOTO.test(E.image.value.trim()) ? E.image.value.trim() : null,
       picks: $$('input[name=picks]:checked', f).map(c => c.value), variants, specs,
       order: editing?.order ?? products.length, updatedAt: F.serverTimestamp()
     };

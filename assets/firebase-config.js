@@ -9,6 +9,9 @@ export default {
   storageBucket: "your-project-id.firebasestorage.app",
   messagingSenderId: "",
   appId: "",
+  // Free (Spark) plan: leave false — orders are saved straight from the website, paid on delivery.
+  // Set to true only after deploying the Cloud Functions (needs the Blaze plan) to switch on M-Pesa.
+  payments: false,
   // Must match the region in functions/index.js
   functionsRegion: "europe-west1"
 };
