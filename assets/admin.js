@@ -45,9 +45,16 @@ async function init() {
     ['#login', '#notAdmin', '#app'].forEach(id => show(id, false));
     $('#logout').hidden = !u; $('#who').textContent = u ? u.email : '';
     if (!u) { show('#login'); return; }
-    let isAdmin = false;
-    try { isAdmin = (await F.getDoc(F.doc(db, 'admins', u.uid))).exists(); } catch (e) { isAdmin = false; }
-    if (!isAdmin) { $('#uid').textContent = u.uid; show('#notAdmin'); return; }
+    let isAdmin = false, why = '';
+    try {
+      isAdmin = (await F.getDoc(F.doc(db, 'admins', u.uid))).exists();
+      if (!isAdmin) why = 'Checked: no document with this ID in the “admins” collection yet.';
+    } catch (e) {
+      why = e.code === 'permission-denied'
+        ? 'Checked: the database refused the check (permission-denied). The security rules are probably not published yet — paste firestore.rules in Firestore → Rules and click Publish.'
+        : `Checked: could not reach the database (${e.code || e.message}). Make sure Firestore Database is created in this project.`;
+    }
+    if (!isAdmin) { $('#uid').textContent = u.uid; $('#why').textContent = why; show('#notAdmin'); return; }
     show('#app');
     startApp();
   });
