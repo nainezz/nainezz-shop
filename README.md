@@ -30,6 +30,9 @@ No packages needed — plain Python 3.
 ### Real product photos
 Put photos in an `images/` folder and add `"image": "images/iphone-16-pro-max.jpg"` to the product. Pages use the photo instead of the drawing.
 
+## Backend (Firebase)
+Orders, M-Pesa payments, live stock and the admin page (`/admin.html`) run on Firebase. Setup steps: **[BACKEND.md](BACKEND.md)**. Until Firebase is connected, the site works on its own and orders go to WhatsApp.
+
 ## Security
 - Static site: no server, database, login or payments to attack — orders go through WhatsApp.
 - Content Security Policy on every page: only the site's own scripts can run.
@@ -38,4 +41,4 @@ Put photos in an `images/` folder and add `"image": "images/iphone-16-pro-max.jp
 - Turn on **Enforce HTTPS** in GitHub Pages once the domain is connected.
 
 ## Hosting
-GitHub Pages: Settings → Pages → Deploy from a branch → `main` / root. When you connect nainezz.co.ke, enter it under Custom domain (GitHub adds a `CNAME` file).
+GitHub Pages: Settings → Pages → Source: **GitHub Actions** (uses `.github/workflows/deploy.yml`, which also pulls products from Firebase). When you connect nainezz.co.ke, enter it under Custom domain (GitHub adds a `CNAME` file).

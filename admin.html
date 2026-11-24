@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; connect-src 'self' https://firestore.googleapis.com https://firebasestorage.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://*.cloudfunctions.net https://*.run.app; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Shop admin — Nainezz</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/admin.css">
+</head>
+<body class="admin">
+<header class="site"><div class="wrap hd">
+  <a class="logo" href="index.html"><svg viewBox="0 0 26 24" aria-hidden="true"><rect x="0" y="16" width="5" height="8" rx="1.5" fill="#2f5bff"/><rect x="7" y="11" width="5" height="13" rx="1.5" fill="#2f5bff"/><rect x="14" y="6" width="5" height="18" rx="1.5" fill="#2f5bff"/><rect x="21" y="0" width="5" height="24" rx="1.5" fill="currentColor"/></svg>nainezz <small class="adm">admin</small></a>
+  <span class="who" id="who"></span>
+  <button class="hbtn" id="logout" type="button" hidden>Sign out</button>
+</div></header>
+
+<main class="wrap" id="main">
+  <section class="panel narrow" id="notReady" hidden>
+    <h1>Firebase isn’t connected yet</h1>
+    <p>Fill in <code>assets/firebase-config.js</code> with your Firebase project’s settings, then reload this page. The steps are in <code>BACKEND.md</code>.</p>
+  </section>
+
+  <form class="panel narrow" id="login" hidden novalidate>
+    <h1>Sign in</h1>
+    <label>Email<input name="email" type="email" autocomplete="username" required></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <p class="err" id="loginErr" hidden></p>
+    <button class="btn big" type="submit">Sign in</button>
+  </form>
+
+  <section class="panel narrow" id="notAdmin" hidden>
+    <h1>This account isn’t an admin</h1>
+    <p>To make it one, open Firebase console → Firestore → start a collection called <b>admins</b> and add a document whose ID is:</p>
+    <p class="uid"><code id="uid"></code> <button class="btn sm ghostd" type="button" id="copyUid">Copy</button></p>
+    <p>Then reload this page.</p>
+  </section>
+
+  <section id="app" hidden>
+    <div class="tabs" role="tablist" aria-label="Admin sections">
+      <button type="button" role="tab" id="t-orders" aria-controls="p-orders" aria-selected="true">Orders</button>
+      <button type="button" role="tab" id="t-products" aria-controls="p-products" aria-selected="false">Products &amp; stock</button>
+      <button type="button" role="tab" id="t-settings" aria-controls="p-settings" aria-selected="false">Shop details</button>
+    </div>
+
+    <div role="tabpanel" id="p-orders" aria-labelledby="t-orders">
+      <div class="kpis" id="kpis"></div>
+      <div class="tools">
+        <label class="fq"><span class="sr">Search orders</span><input id="oq" type="search" placeholder="Search by order number, name or phone"></label>
+        <label class="sort">Status <select id="ofilter"><option value="">All</option><option value="new">New</option><option value="awaiting_payment">Awaiting payment</option><option value="paid">Paid</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option><option value="payment_failed">Payment failed</option></select></label>
+      </div>
+      <div class="scroll"><table class="atable" id="orders"><thead><tr><th>Order</th><th>Customer</th><th>Items</th><th class="r">Total</th><th>Payment</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+      <p class="empty" id="noOrders" hidden>No orders yet. They appear here the moment a customer checks out.</p>
+    </div>
+
+    <div role="tabpanel" id="p-products" aria-labelledby="t-products" hidden>
+      <div class="tools">
+        <label class="fq"><span class="sr">Search products</span><input id="pq" type="search" placeholder="Search products"></label>
+        <button class="btn" type="button" id="addProduct">Add product</button>
+        <button class="btn ghostd" type="button" id="importBtn">Import from products.json</button>
+      </div>
+      <p class="fine">Price and stock changes show on the website straight away. New products and new photos get their own page at the next site rebuild (automatic every 6 hours, or run it from GitHub → Actions). Leave stock blank to not track it.</p>
+      <div class="scroll"><table class="atable" id="products"><thead><tr><th>Product</th><th>Category</th><th class="r">Price</th><th>Stock</th><th>On sale</th><th></th></tr></thead><tbody></tbody></table></div>
+      <p class="empty" id="noProducts" hidden>No products in Firebase yet. Use “Import from products.json” to copy in the current website products.</p>
+    </div>
+
+    <form class="panel" id="p-settings" role="tabpanel" aria-labelledby="t-settings" hidden novalidate>
+      <h2>Shop details</h2>
+      <p class="fine">Used across the website after the next rebuild.</p>
+      <div class="cols2">
+        <label>Shop name<input name="name" maxlength="40"></label>
+        <label>Website address<input name="domain" maxlength="80" placeholder="https://nainezz.co.ke"></label>
+        <label>Phone (as shown)<input name="phone_display" maxlength="20" placeholder="0712 345 678"></label>
+        <label>Phone (for calls)<input name="phone_tel" maxlength="16" placeholder="+254712345678"></label>
+        <label>WhatsApp number<input name="wa" maxlength="15" placeholder="254712345678"></label>
+        <label>Email<input name="email" type="email" maxlength="80"></label>
+        <label>Address<input name="address" maxlength="120"></label>
+        <label>Opening hours<input name="hours" maxlength="60"></label>
+        <label class="wide">Google Maps link<input name="map_link" type="url" maxlength="300"></label>
+      </div>
+      <p class="err" id="setErr" hidden></p>
+      <button class="btn" type="submit">Save shop details</button>
+    </form>
+  </section>
+</main>
+
+<dialog id="editor" aria-labelledby="edTitle">
+  <form id="edForm" novalidate>
+    <div class="edhd"><h2 id="edTitle">Edit product</h2><button type="button" class="x" id="edClose" aria-label="Close">×</button></div>
+    <div class="edbody">
+      <div class="cols2">
+        <label class="wide">Name<input name="name" required maxlength="120"></label>
+        <label>Page address (slug)<input name="slug" required maxlength="80" pattern="[a-z0-9-]+" placeholder="iphone-16-pro-max"></label>
+        <label>Brand<input name="brand" required maxlength="40" list="brandList"></label>
+        <label>Category<select name="cat" id="catSel"></select></label>
+        <label>Badge<select name="badge"><option value="">None</option><option>HOT</option><option>NEW</option></select></label>
+        <label>Stock<input name="stock" type="number" min="0" step="1" inputmode="numeric" placeholder="not tracked"></label>
+        <label class="check"><input name="active" type="checkbox" checked> On sale (shown on the website)</label>
+        <label class="wide">Short description<textarea name="desc" rows="2" maxlength="300"></textarea></label>
+      </div>
+      <h3>Options and prices</h3>
+      <p class="fine">One row per storage size or option. “Old price” shows as a discount.</p>
+      <div id="variants" class="rows"></div>
+      <button type="button" class="btn sm ghostd" id="addVariant">Add option</button>
+
+      <h3>Specifications</h3>
+      <div id="specs" class="rows"></div>
+      <button type="button" class="btn sm ghostd" id="addSpec">Add specification</button>
+
+      <h3>Photo</h3>
+      <div class="photo"><div class="thumb" id="thumb"></div><div>
+        <label class="btn sm ghostd file">Upload photo<input type="file" id="photo" accept="image/jpeg,image/png,image/webp"></label>
+        <button type="button" class="btn sm ghostd" id="rmPhoto">Remove photo</button>
+        <p class="fine">JPG, PNG or WebP under 3 MB. Square photos on a white background look best.</p>
+        <input type="hidden" name="image">
+      </div></div>
+
+      <h3>Website look</h3>
+      <div class="cols2">
+        <label>Drawing (when no photo)<select name="art"><option>phone</option><option>tablet</option><option>laptop</option><option>buds</option><option>speaker</option><option>watch</option><option>charger</option><option>bank</option><option>tag</option><option>case</option></select></label>
+        <label>Colour<input name="color" type="color" value="#9fb7d6"></label>
+        <fieldset class="wide picks"><legend>Show in Power picks</legend>
+          <label class="check"><input type="checkbox" name="picks" value="top"> Top phones</label>
+          <label class="check"><input type="checkbox" name="picks" value="creator"> Creator picks</label>
+          <label class="check"><input type="checkbox" name="picks" value="budget"> Budget picks</label>
+        </fieldset>
+      </div>
+    </div>
+    <p class="err" id="edErr" hidden></p>
+    <div class="edft">
+      <button type="button" class="btn ghostd danger" id="edDelete">Delete</button>
+      <span class="grow"></span>
+      <button type="button" class="btn ghostd" id="edCancel">Cancel</button>
+      <button type="submit" class="btn" id="edSave">Save product</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="brandList"></datalist>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="assets/admin.js"></script>
+</body>
+</html>

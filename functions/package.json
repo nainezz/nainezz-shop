@@ -1,0 +1,17 @@
+{
+  "name": "nainezz-shop-functions",
+  "description": "Backend for the Nainezz shop: orders, M-Pesa payments and stock",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

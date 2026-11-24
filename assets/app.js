@@ -97,19 +97,25 @@
   }
   const co = $('#checkoutForm');
   if (co) {
-    try { const saved = JSON.parse(localStorage.getItem('nz-details') || '{}'); ['name', 'area'].forEach(k => { if (saved[k]) co.elements[k].value = String(saved[k]).slice(0, 100); }); } catch (e) { /* ignore */ }
+    try { const saved = JSON.parse(localStorage.getItem('nz-details') || '{}'); ['name', 'phone', 'area'].forEach(k => { if (saved[k] && co.elements[k]) co.elements[k].value = String(saved[k]).slice(0, 100); }); } catch (e) { /* ignore */ }
     co.addEventListener('submit', e => {
       e.preventDefault();
       if (!cart.length) return;
       const f = co.elements;
-      try { localStorage.setItem('nz-details', JSON.stringify({ name: f.name.value, area: f.area.value })); } catch (err) { /* ignore */ }
+      const d = { name: f.name.value.trim(), phone: f.phone.value.trim(), area: f.area.value.trim(), notes: f.notes.value.trim(),
+        pay: (co.querySelector('input[name=pay]:checked') || {}).value || 'whatsapp', items: cart.map(x => Object.assign({}, x)) };
+      try { localStorage.setItem('nz-details', JSON.stringify({ name: d.name, phone: d.phone, area: d.area })); } catch (err) { /* ignore */ }
       let msg = 'Hi ' + SHOP + ', I would like to order:\n';
       cart.forEach(x => { msg += '• ' + x.qty + ' × ' + x.name + (x.variant ? ' (' + x.variant + ')' : '') + ' – ' + ksh(x.price * x.qty) + '\n'; });
       msg += 'Total: ' + ksh(cart.reduce((s, x) => s + x.price * x.qty, 0)) + '\n';
-      if (f.name.value.trim()) msg += 'Name: ' + f.name.value.trim() + '\n';
-      msg += 'Delivery: ' + (f.area.value.trim() || '(please advise)') + '\n';
-      if (f.notes.value.trim()) msg += 'Notes: ' + f.notes.value.trim();
-      openWa(msg);
+      if (d.name) msg += 'Name: ' + d.name + '\n';
+      if (d.phone) msg += 'Phone: ' + d.phone + '\n';
+      msg += 'Delivery: ' + (d.area || '(please advise)') + '\n';
+      if (d.notes) msg += 'Notes: ' + d.notes;
+      d.msg = msg;
+      // With Firebase set up, live.js takes over: saves the order and can start an M-Pesa payment.
+      if (typeof window.NZ_CHECKOUT === 'function') window.NZ_CHECKOUT(d);
+      else openWa(msg);
     });
   }
 
@@ -189,7 +195,7 @@
       order.forEach(c => grid.appendChild(c));
       let shown = 0;
       cards.forEach(c => {
-        const ok = (!brand || c.dataset.b === brand) && (!cat || c.dataset.c === cat) && words.every(w => c.dataset.n.includes(w));
+        const ok = c.dataset.off !== '1' && (!brand || c.dataset.b === brand) && (!cat || c.dataset.c === cat) && words.every(w => c.dataset.n.includes(w));
         c.hidden = !ok; if (ok) shown++;
       });
       if (count) count.textContent = shown + (shown === 1 ? ' product' : ' products') + (brand ? ' · ' + brand : '');
@@ -201,6 +207,7 @@
     $$('[data-fc]').forEach(b => b.addEventListener('click', () => { cat = b.dataset.fc; apply(); }));
     if (q) q.addEventListener('input', apply);
     if (sort) sort.addEventListener('change', apply);
+    document.addEventListener('nz:live', apply);
     apply();
   }
 
@@ -218,6 +225,12 @@
       add.dataset.variant = v.dataset.label; add.dataset.price = String(p);
     }));
   }
+
+  /* shared with live.js */
+  window.NZ = {
+    ksh, waUrl,
+    clearCart() { cart = []; save(); updateCount(); renderCart(); }
+  };
 
   updateCount();
   renderCart();

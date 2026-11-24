@@ -1,0 +1,58 @@
+/* Admin page — builds on style.css */
+.admin main{padding-block:24px 60px}
+.admin .hd{justify-content:flex-start}
+.adm{font:600 13px Inter,sans-serif;color:var(--mute);margin-left:4px}
+.who{margin-left:auto;color:var(--mute);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.narrow{max-width:460px;margin:40px auto}
+.narrow h1{font-size:28px}
+.uid{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+code{background:var(--soft);padding:3px 7px;border-radius:6px;font-size:14px;overflow-wrap:anywhere}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.kpis div{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.kpis b{display:block;font:800 26px Archivo,sans-serif;white-space:nowrap}
+.kpis span{color:var(--mute);font-size:13px}
+@media(max-width:800px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.atable{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-top:14px;font-size:14.5px;min-width:760px}
+.atable th,.atable td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.atable th{font-size:13px;color:var(--mute);font-weight:600;background:var(--soft)}
+.atable .r{text-align:right;white-space:nowrap}
+.atable small{display:block;color:var(--mute)}
+.atable a{color:var(--acc2)}
+.atable select,.atable input{font-size:15px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);min-height:38px}
+.atable input[type=number]{width:84px}
+.atable input[type=checkbox]{width:22px;height:22px;min-height:0}
+.st{font-weight:700}
+.st.new{color:var(--acc2)}.st.paid,.st.delivered{color:var(--wa)}.st.cancelled,.st.payment_failed{color:var(--hot)}.st.awaiting_payment{color:#b7791f}
+tr.dim td{opacity:.55}
+.tools .btn{flex:none}
+/* editor */
+dialog{border:0;border-radius:18px;padding:0;width:min(760px,96vw);max-height:92vh;background:var(--card);color:var(--ink);box-shadow:0 30px 80px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(10,12,18,.55)}
+#edForm{display:flex;flex-direction:column;max-height:92vh}
+.edhd,.edft{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line)}
+.edft{border-bottom:0;border-top:1px solid var(--line)}
+.edhd h2{font-size:22px}.edhd .x{margin-left:auto;border:0;background:none;font-size:28px;width:44px;height:44px}
+.edbody{overflow:auto;padding:16px 20px;display:grid;gap:10px}
+.edbody h3{font-size:17px;margin-top:10px}
+.grow{flex:1}
+.cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cols2 .wide{grid-column:1/-1}
+@media(max-width:560px){.cols2{grid-template-columns:1fr}}
+.admin label{display:grid;gap:5px;font-weight:600;font-size:14px}
+.admin input,.admin select,.admin textarea{font-size:16px;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);min-height:44px;font-weight:400}
+.admin input[type=color]{padding:4px;height:44px}
+.admin label.check{display:flex;align-items:center;gap:8px;font-weight:500}
+.admin label.check input{min-height:0;width:20px;height:20px}
+.picks{border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;gap:16px;flex-wrap:wrap}
+.picks legend{font-weight:600;font-size:14px;padding:0 4px}
+.rows{display:grid;gap:8px}
+.rows .rw{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) 44px;gap:8px;align-items:center}
+.rows .rw.spec{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 44px}
+.rows .rmrow{border:0;background:none;color:var(--hot);font-size:22px;height:44px}
+.photo{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.photo .thumb{width:110px;height:110px;border-radius:12px;background:var(--soft);display:grid;place-items:center;overflow:hidden;flex:none}
+.photo .thumb img{width:100%;height:100%;object-fit:contain}
+.file{position:relative;overflow:hidden;display:inline-flex}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.danger{color:var(--hot)!important;border-color:currentColor!important}
+.ostatus{padding:14px;border-radius:12px;background:var(--soft);display:grid;gap:10px}

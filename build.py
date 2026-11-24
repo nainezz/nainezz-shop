@@ -4,19 +4,98 @@
 Edit data/products.json (products, prices, phone number, address), then run:
     python3 build.py
 and commit the result. No packages needed — plain Python 3.
+
+Once Firebase is set up, products and shop details can come from the admin page instead:
+    python3 build.py --from-firebase          # read products + settings from Firestore
+    python3 build.py --from-firebase --out _site   # write the site to another folder (used by GitHub Actions)
+If Firebase is not configured or can't be reached, the build falls back to data/products.json.
 """
 import html
 import json
 import os
 import re
 import shutil
+import sys
+import urllib.request
 from urllib.parse import quote
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+ARGS = sys.argv[1:]
+OUT = os.path.abspath(ARGS[ARGS.index("--out") + 1]) if "--out" in ARGS else ROOT
 D = json.load(open(os.path.join(ROOT, "data", "products.json"), encoding="utf-8"))
-S, CATS, P = D["site"], D["categories"], D["products"]
-CAT = {c["slug"]: c for c in CATS}
-BY = {p["slug"]: p for p in P}
+
+
+# ---------- optional: live data from Firestore (public read, no keys needed) ----------
+def fs_val(v):
+    if "stringValue" in v: return v["stringValue"]
+    if "integerValue" in v: return int(v["integerValue"])
+    if "doubleValue" in v: return float(v["doubleValue"])
+    if "booleanValue" in v: return v["booleanValue"]
+    if "nullValue" in v: return None
+    if "timestampValue" in v: return v["timestampValue"]
+    if "arrayValue" in v: return [fs_val(x) for x in v["arrayValue"].get("values", [])]
+    if "mapValue" in v: return {k: fs_val(x) for k, x in v["mapValue"].get("fields", {}).items()}
+    return None
+
+
+def fs_get(url):
+    with urllib.request.urlopen(url, timeout=20) as r:
+        return json.load(r)
+
+
+def from_firebase():
+    cfg = open(os.path.join(ROOT, "assets", "firebase-config.js"), encoding="utf-8").read()
+    m = re.search(r'projectId:\s*"([a-z0-9-]+)"', cfg)
+    if not m or m.group(1) == "your-project-id":
+        print("Firebase not configured (assets/firebase-config.js) - using data/products.json")
+        return
+    base = f"https://firestore.googleapis.com/v1/projects/{m.group(1)}/databases/(default)/documents"
+    try:
+        docs, token = [], ""
+        while True:
+            j = fs_get(f"{base}/products?pageSize=300" + (f"&pageToken={quote(token)}" if token else ""))
+            docs += j.get("documents", [])
+            token = j.get("nextPageToken", "")
+            if not token:
+                break
+        try:
+            site = {k: fs_val(v) for k, v in fs_get(f"{base}/settings/site").get("fields", {}).items()}
+            D["site"].update({k: v for k, v in site.items() if isinstance(v, str) and v.strip()})
+        except Exception:
+            pass
+    except Exception as ex:
+        print(f"Could not read Firestore ({ex}) - using data/products.json")
+        return
+    prods = []
+    for d in docs:
+        f = {k: fs_val(v) for k, v in d.get("fields", {}).items()}
+        if f.get("active") is False or not f.get("variants"):
+            continue
+        variants = []
+        for v in f["variants"]:
+            if not isinstance(v, dict) or not v.get("price"):
+                continue
+            row = [str(v.get("label") or "Standard"), int(v["price"])]
+            if v.get("was") and int(v["was"]) > int(v["price"]):
+                row.append(int(v["was"]))
+            variants.append(row)
+        if not variants or f.get("cat") not in {c["slug"] for c in D["categories"]}:
+            continue
+        prods.append({"slug": d["name"].rsplit("/", 1)[-1], "name": f.get("name", ""), "brand": f.get("brand") or "Other",
+                      "cat": f["cat"], "art": f.get("art") if f.get("art") in SHAPES else "phone", "color": f.get("color") or "#9fb7d6",
+                      "badge": f.get("badge") or None, "picks": f.get("picks") or [], "variants": variants,
+                      "desc": f.get("desc", ""), "specs": f.get("specs") or {}, "image": f.get("image") or None,
+                      "_order": f.get("order", 9999)})
+    if prods:
+        prods.sort(key=lambda p: (p["_order"] if isinstance(p["_order"], (int, float)) else 9999, p["name"]))
+        D["products"] = prods
+        known = {p["slug"] for p in prods}
+        D["slides"] = [s for s in D["slides"] if s["slug"] in known] or [
+            {"slug": p["slug"], "tag": "New in store", "title": p["name"], "text": p["desc"]} for p in prods[:3]]
+        print(f"Loaded {len(prods)} products from Firebase")
+    else:
+        print("Firestore has no products yet - using data/products.json")
+
 
 
 def e(s):
@@ -35,21 +114,11 @@ def wa(msg):
     return f"https://wa.me/{S['wa']}?text={quote(msg)}"
 
 
-for p in P:  # derived fields
-    v = p["variants"][0]
-    p["price"], p["was"] = v[1], (v[2] if len(v) > 2 else None)
-    p["from"] = len(p["variants"]) > 1
-    p.setdefault("picks", [])
-    p["url"] = f"product/{p['slug']}.html"
-
-BRANDS = []
-for p in P:
-    if p["brand"] not in BRANDS:
-        BRANDS.append(p["brand"])
-
-CSP = ("default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; "
-       "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
-       "object-src 'none'; base-uri 'self'; form-action 'self'")
+CSP = ("default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' https://fonts.googleapis.com; "
+       "font-src https://fonts.gstatic.com; img-src 'self' data: https://firebasestorage.googleapis.com; "
+       "connect-src 'self' https://firestore.googleapis.com https://firebasestorage.googleapis.com https://identitytoolkit.googleapis.com "
+       "https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://*.cloudfunctions.net https://*.run.app; "
+       "frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'")
 
 # ---------- product pictures (drawn, until you add real photos) ----------
 SHAPES = {
@@ -64,6 +133,22 @@ SHAPES = {
     "tag": '<circle cx="50" cy="48" r="28" fill="{c}" stroke="#ccc"/><circle cx="50" cy="48" r="28" fill="url(#sh)"/><circle cx="50" cy="48" r="9" fill="#d9dbe0"/>',
     "case": '<rect x="30" y="6" width="40" height="80" rx="10" fill="{c}" opacity=".85"/><rect x="36" y="12" width="14" height="16" rx="4" fill="#1b1d22"/>',
 }
+if "--from-firebase" in ARGS:
+    from_firebase()
+S, CATS, P = D["site"], D["categories"], D["products"]
+CAT = {c["slug"]: c for c in CATS}
+BY = {p["slug"]: p for p in P}
+for p in P:  # derived fields
+    v = p["variants"][0]
+    p["price"], p["was"] = v[1], (v[2] if len(v) > 2 else None)
+    p["from"] = len(p["variants"]) > 1
+    p.setdefault("picks", [])
+    p["url"] = f"product/{p['slug']}.html"
+BRANDS = []
+for p in P:
+    if p["brand"] not in BRANDS:
+        BRANDS.append(p["brand"])
+
 DEFS = '<defs><linearGradient id="sh" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".18"/></linearGradient></defs>'
 
 
@@ -74,7 +159,8 @@ def shape(kind, color):
 def pic(p, R, cls=""):
     """Real photo if the product has "image": "images/xyz.jpg", otherwise the drawing."""
     if p.get("image"):
-        return f'<img class="{cls}" src="{R}{e(p["image"])}" alt="{e(p["name"])}" loading="lazy">'
+        src = p["image"] if str(p["image"]).startswith("https://") else R + p["image"]
+        return f'<img class="{cls}" src="{e(src)}" alt="{e(p["name"])}" loading="lazy">'
     return f'<svg class="{cls}" viewBox="0 0 100 92" role="img" aria-label="{e(p["name"])}">{shape(p["art"], p["color"])}</svg>'
 
 
@@ -96,11 +182,11 @@ def card(p, R):
     v = p["variants"][0][0]
     words = " ".join([p["name"], p["brand"], CAT[p["cat"]]["name"], " ".join(x[0] for x in p["variants"])]).lower()
     msg = f"Hi {S['name']}, I would like to order: {p['name']} ({v}) – {ksh(p['price'])}. Is it available?"
-    return f'''<article class="card" data-n="{e(words)}" data-b="{e(p['brand'])}" data-c="{p['cat']}" data-p="{p['price']}" data-d="{off}">
+    return f'''<article class="card" data-slug="{p['slug']}" data-n="{e(words)}" data-b="{e(p['brand'])}" data-c="{p['cat']}" data-p="{p['price']}" data-d="{off}">
 {badge}<a class="pic" href="{R}{p['url']}" tabindex="-1" aria-hidden="true">{pic(p, R)}</a>
 <h3><a href="{R}{p['url']}">{e(p['name'])}</a></h3>
 <div class="price">{price}</div>
-<div class="meta"><span>In stock</span><span>Genuine</span><span>Same-day delivery</span></div>
+<div class="meta"><span class="stk">In stock</span><span>Genuine</span><span>Same-day delivery</span></div>
 <div class="acts"><a class="wa" href="{e(wa(msg))}" target="_blank" rel="noopener">{WA_ICON}Order on WhatsApp</a>
 <button type="button" data-add="{p['slug']}" data-name="{e(p['name'])}" data-variant="{e(v)}" data-price="{p['price']}">Add to cart</button></div>
 <a class="call" href="tel:{S['phone_tel']}">or call to order: {e(S['phone_display'])}</a>
@@ -142,7 +228,7 @@ def filter_tools(items, R, show_brands=True, show_cats=False):
 <div class="empty" id="noRes" hidden>Nothing matches that. <a id="askWa" href="{e(wa("Hi " + S["name"] + ", do you have:"))}" target="_blank" rel="noopener">Ask us on WhatsApp</a> — we can often get it.</div>'''
 
 
-def page(path, title, desc, body, active=None, extra_head=""):
+def page(path, title, desc, body, active=None, extra_head="", body_attr=""):
     depth = path.count("/")
     R = "../" * depth
     nav = ""
@@ -173,7 +259,7 @@ def page(path, title, desc, body, active=None, extra_head=""):
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
 <link rel="stylesheet" href="{R}assets/style.css">
 {extra_head}</head>
-<body data-root="{R}" data-wa="{S['wa']}" data-shop="{e(S['name'])}">
+<body data-root="{R}" data-wa="{S['wa']}" data-shop="{e(S['name'])}"{body_attr}>
 <a class="skip" href="#main">Skip to content</a>
 <div class="top"><div class="wrap"><span>Genuine devices with warranty</span><span>Same-day delivery in Nairobi</span><span>7-day returns on faulty items</span><span class="tr"><a href="tel:{S['phone_tel']}">{e(S['phone_display'])}</a> · <a href="{e(hello)}" target="_blank" rel="noopener">WhatsApp</a> · {e(S['address'].split('(')[0].strip())}</span></div></div>
 <header class="site">
@@ -201,10 +287,11 @@ def page(path, title, desc, body, active=None, extra_head=""):
 <a class="fab" href="{e(hello)}" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">{WA_ICON}</a>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="{R}assets/app.js" defer></script>
+<script type="module" src="{R}assets/live.js"></script>
 </body>
 </html>
 '''
-    full = os.path.join(ROOT, path)
+    full = os.path.join(OUT, path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "w", encoding="utf-8") as f:
         f.write(out)
@@ -230,7 +317,15 @@ def crumbs(R, *items):
 
 # ---------- clean old generated folders ----------
 for d in ("category", "brand", "product"):
-    shutil.rmtree(os.path.join(ROOT, d), ignore_errors=True)
+    shutil.rmtree(os.path.join(OUT, d), ignore_errors=True)
+if OUT != ROOT:  # copy the hand-written files next to the generated pages
+    os.makedirs(OUT, exist_ok=True)
+    for d in ("assets", "data", "images"):
+        if os.path.isdir(os.path.join(ROOT, d)):
+            shutil.copytree(os.path.join(ROOT, d), os.path.join(OUT, d), dirs_exist_ok=True)
+    for f in ("admin.html", "CNAME"):
+        if os.path.exists(os.path.join(ROOT, f)):
+            shutil.copy(os.path.join(ROOT, f), os.path.join(OUT, f))
 
 # ---------- home ----------
 R = ""
@@ -254,6 +349,8 @@ tab_panels = "".join(f'<div role="tabpanel" id="p-{k}" aria-labelledby="t-{k}"{"
 cat_sections = ""
 for c in CATS:
     items = [p for p in P if p["cat"] == c["slug"]][:8]
+    if not items:
+        continue
     cat_sections += f'<section class="band">{sechd(c["name"], c["blurb"], ("category/" + c["slug"] + ".html", "View all"))}{grid(items, R)}</section>'
 popular = "".join(f'<a href="shop.html?q={quote(q)}">{e(q)}</a>' for q in D["popular"])
 deals = [p for p in P if p["was"]]
@@ -321,7 +418,7 @@ for p in P:
 <p class="lede">{e(p['desc'])}</p>
 <div class="pprice"><span id="pPrice">{ksh(p['price'])}</span>{was}</div>
 {vbtns}
-<ul class="assure"><li>In stock in Nairobi</li><li>Genuine, sealed, with warranty</li><li>Same-day delivery in Nairobi · pickup in shop</li><li>Pay on delivery or by M-Pesa</li></ul>
+<ul class="assure"><li id="pStock">In stock in Nairobi</li><li>Genuine, sealed, with warranty</li><li>Same-day delivery in Nairobi · pickup in shop</li><li>Pay on delivery or by M-Pesa</li></ul>
 <div class="pacts">
 <a class="btn wa big" id="pWa" data-msg="{e(base_msg)}" href="{e(wa(base_msg + f' ({v0[0]}) – {ksh(p["price"])}. Is it available?'))}" target="_blank" rel="noopener">{WA_ICON}Order on WhatsApp</a>
 <button type="button" class="btn big alt" id="pAdd" data-add="{p['slug']}" data-name="{e(p['name'])}" data-variant="{e(v0[0])}" data-price="{p['price']}">Add to cart</button>
@@ -333,7 +430,7 @@ for p in P:
 <section class="band">{sechd("You may also like", "", (f"{R}category/{c['slug']}.html", "More " + c['name'].lower()))}{grid(related, R)}</section>
 </div>'''
     page(path, f"{p['name']} price in Kenya — {S['name']}", f"{p['name']} from {ksh(p['price'])} in Nairobi. {p['desc']}", body, p["cat"],
-         f'<script type="application/ld+json">{ld}</script>\n')
+         f'<script type="application/ld+json">{ld}</script>\n', f' data-product="{p["slug"]}"')
 
 # ---------- cart ----------
 cart = f'''<div class="wrap">{crumbs("", ("Cart", None))}
@@ -343,10 +440,17 @@ cart = f'''<div class="wrap">{crumbs("", ("Cart", None))}
 <form class="panel" id="checkoutForm" novalidate>
 <h2>Order details</h2>
 <label>Your name<input name="name" autocomplete="name" maxlength="60"></label>
+<label>Phone number<input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 0712 345 678" maxlength="16"></label>
 <label>Delivery area or pickup<input name="area" placeholder="e.g. Westlands, or pickup in shop" maxlength="100"></label>
 <label>Notes (optional)<textarea name="notes" rows="3" maxlength="300" placeholder="Colour, best time to call…"></textarea></label>
+<fieldset class="pay" id="payChoice" hidden><legend>How would you like to pay?</legend>
+<label class="opt"><input type="radio" name="pay" value="mpesa" checked><span><b>Pay now with M-Pesa</b><small>We send a payment prompt to your phone</small></span></label>
+<label class="opt"><input type="radio" name="pay" value="whatsapp"><span><b>Pay on delivery</b><small>Confirm your order with us on WhatsApp</small></span></label>
+</fieldset>
 <div class="tot"><span>Total</span><span id="cartTotal">KSh 0</span></div>
-<button class="btn wa big" type="submit" id="checkoutBtn">{WA_ICON}Send order on WhatsApp</button>
+<p class="err" id="checkoutErr" hidden></p>
+<button class="btn wa big" type="submit" id="checkoutBtn">{WA_ICON}<span id="checkoutLabel">Send order on WhatsApp</span></button>
+<div class="ostatus" id="orderStatus" role="status" aria-live="polite" hidden></div>
 <a class="btn ghostd big" href="tel:{S['phone_tel']}">Or call {e(S['phone_display'])}</a>
 <p class="fine">Pay on delivery or by M-Pesa after we confirm. Delivery is free within Nairobi CBD.</p>
 </form>
@@ -396,10 +500,10 @@ page("404.html", f"Page not found — {S['name']}", "Page not found.",
 # ---------- sitemap + robots ----------
 urls = ["", "shop.html", "deals.html", "trade-in.html", "contact.html"] + [f"category/{c['slug']}.html" for c in CATS] + \
        [f"brand/{slugify(b)}.html" for b in BRANDS] + [p["url"] for p in P]
-with open(os.path.join(ROOT, "sitemap.xml"), "w", encoding="utf-8") as f:
+with open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8") as f:
     f.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
             "".join(f"  <url><loc>{S['domain']}/{u}</loc></url>\n" for u in urls) + "</urlset>\n")
-with open(os.path.join(ROOT, "robots.txt"), "w", encoding="utf-8") as f:
-    f.write(f"User-agent: *\nAllow: /\nSitemap: {S['domain']}/sitemap.xml\n")
+with open(os.path.join(OUT, "robots.txt"), "w", encoding="utf-8") as f:
+    f.write(f"User-agent: *\nAllow: /\nDisallow: /admin.html\nSitemap: {S['domain']}/sitemap.xml\n")
 
 print(f"Built {len(P)} product pages, {len(CATS)} categories, {len(BRANDS)} brands.")

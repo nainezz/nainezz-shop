@@ -1,0 +1,14 @@
+// Paste your Firebase web app settings here.
+// Firebase console → Project settings → General → Your apps → Web app → "SDK setup and configuration" → Config.
+// These values are meant to be public: security comes from firestore.rules and storage.rules, not from hiding them.
+// Until apiKey is filled in, the site keeps working without a backend (orders go to WhatsApp only).
+export default {
+  apiKey: "PASTE_YOUR_API_KEY",
+  authDomain: "your-project-id.firebaseapp.com",
+  projectId: "your-project-id",
+  storageBucket: "your-project-id.firebasestorage.app",
+  messagingSenderId: "",
+  appId: "",
+  // Must match the region in functions/index.js
+  functionsRegion: "europe-west1"
+};

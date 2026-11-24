@@ -1,0 +1,20 @@
+rules_version = '2';
+// Product photos: anyone can view them; only admins can upload (images under 3 MB) or delete.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+    match /products/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if isAdmin();
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
