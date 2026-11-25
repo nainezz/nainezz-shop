@@ -99,7 +99,7 @@ function setupDirectCheckout(form) {
   const api = (body.dataset.root || '') + 'api/';
 
   // M-Pesa runs on Cloudflare (/api). Show the choice only when the server says it's switched on.
-  fetch(api + 'health', { cache: 'no-store' }).then(r => (r.ok ? r.json() : {})).then(h => {
+  fetch(api + 'health' + (location.hash === '#mpesa-test' ? '?test=1' : ''), { cache: 'no-store' }).then(r => (r.ok ? r.json() : {})).then(h => {
     if (!h || h.mpesa !== true) return;
     choice.hidden = false;
     const sync = () => {

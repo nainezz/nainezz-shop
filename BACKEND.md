@@ -51,7 +51,8 @@ The M-Pesa server code runs on Cloudflare Pages Functions, next to the website. 
 | `functions/api/health.js` | Tells the cart page whether M-Pesa is switched on |
 | `lib/` | Shared code: Firestore access, Daraja calls, payment check + stock update |
 
-The "Pay now with M-Pesa" option appears at checkout **by itself** once the secrets below are set.
+The "Pay now with M-Pesa" option appears for customers **by itself** once the secrets below are set **and** `MPESA_ENV` is `production`.
+While testing in the sandbox, open the cart as `/cart.html#mpesa-test` to see it yourself.
 
 ## 1. Daraja (Safaricom) test app
 1. Sign up at <https://developer.safaricom.co.ke> → **My Apps → Create new app** → tick **M-Pesa Express (Lipa Na M-Pesa Online)** → create.
