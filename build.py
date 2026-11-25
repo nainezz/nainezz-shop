@@ -367,7 +367,6 @@ home = f'''<section class="hero" aria-label="Featured" aria-roledescription="car
 <section class="band">{sechd("Power picks")}<div class="tabs" role="tablist" aria-label="Power picks">{tab_btns}</div>{tab_panels}</section>
 {cat_sections}
 <section class="band">{sechd("Popular searches")}<div class="popular">{popular}</div></section>
-<p class="note">Sample products and prices — replace them with your real stock in data/products.json.</p>
 </div>'''
 page("index.html", f"{S['name']} — Phones, Laptops & Accessories in Nairobi",
      "Genuine smartphones, tablets, laptops, earbuds and accessories in Nairobi. Same-day delivery, order on WhatsApp.", home)
