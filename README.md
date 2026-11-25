@@ -31,7 +31,7 @@ No packages needed — plain Python 3.
 Put photos in an `images/` folder and add `"image": "images/iphone-16-pro-max.jpg"` to the product. Pages use the photo instead of the drawing.
 
 ## Backend (Firebase)
-Orders, M-Pesa payments, live stock and the admin page (`/admin.html`) run on Firebase. Setup steps: **[BACKEND.md](BACKEND.md)**. Until Firebase is connected, the site works on its own and orders go to WhatsApp.
+Orders, live stock and the admin page (`/admin.html`) run on Firebase; M-Pesa payments run on Cloudflare Pages Functions (`functions/api`). Setup steps: **[BACKEND.md](BACKEND.md)**. Until Firebase is connected, the site works on its own and orders go to WhatsApp.
 
 ## Security
 - Static site: no server, database, login or payments to attack — orders go through WhatsApp.

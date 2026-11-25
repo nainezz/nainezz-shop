@@ -10,8 +10,7 @@ The website works without this — orders just go to WhatsApp. There are two lev
 - Customers pay on delivery; each order still goes to you on WhatsApp to confirm.
 - Photos: put them in the `images/` folder of the repo and type the name in the admin page.
 
-**Paid plan (Blaze) — later, for M-Pesa on the website.** Adds STK push payments that mark orders Paid automatically,
-server-side price checks and photo uploads. Steps are under *Later: M-Pesa* below.
+**M-Pesa** — runs free on Cloudflare: STK push payments that mark orders Paid automatically. Steps under *M-Pesa on Cloudflare* below.
 
 ## Free plan setup
 1. **Firebase project** (done): Firestore database, Authentication with Email/Password and your admin user.
@@ -35,14 +34,74 @@ server-side price checks and photo uploads. Steps are under *Later: M-Pesa* belo
 | `assets/firebase-config.js` | Your Firebase project settings (paste them in — step 2) |
 | `assets/live.js` | Website: live prices/stock, saves orders, runs M-Pesa checkout |
 | `admin.html`, `assets/admin.js` | The admin page |
-| `functions/index.js` | Server code: `createOrder`, `orderStatus`, `mpesaCallback`, `syncStock` |
-| `functions/.env` | M-Pesa settings (sandbox or live, paybill or till) |
+| `firebase-functions/index.js` | Server code: `createOrder`, `orderStatus`, `mpesaCallback`, `syncStock` |
+| `firebase-functions/.env` | M-Pesa settings (sandbox or live, paybill or till) |
 | `firestore.rules`, `storage.rules` | Who may read/write what — the main security layer |
 | `.github/workflows/rebuild.yml` | Asks Cloudflare to rebuild the site every 6 hours (or on demand) |
 
-# Later: M-Pesa (paid Blaze plan)
+# M-Pesa on Cloudflare (free)
 
-When you're ready for M-Pesa on the site, do these steps, then set `payments: true` in `assets/firebase-config.js`.
+The M-Pesa server code runs on Cloudflare Pages Functions, next to the website. No Blaze plan or card needed.
+
+| File | What it does |
+|---|---|
+| `functions/api/order.js` | Checks prices and stock in Firebase, saves the order, sends the STK prompt |
+| `functions/api/mpesa-callback.js` | Safaricom calls this when the customer pays |
+| `functions/api/order-status.js` | The cart page follows its order (asks Safaricom directly if the callback is slow) |
+| `functions/api/health.js` | Tells the cart page whether M-Pesa is switched on |
+| `lib/` | Shared code: Firestore access, Daraja calls, payment check + stock update |
+
+The "Pay now with M-Pesa" option appears at checkout **by itself** once the secrets below are set.
+
+## 1. Daraja (Safaricom) test app
+1. Sign up at <https://developer.safaricom.co.ke> → **My Apps → Create new app** → tick **M-Pesa Express (Lipa Na M-Pesa Online)** → create.
+2. Open the app and note the **Consumer Key** and **Consumer Secret**.
+3. Under **APIs → M-Pesa Express → Simulate**, note the sandbox **Passkey** (for shortcode `174379`).
+
+## 2. Firebase service account (lets the server save orders)
+Firebase console → ⚙ **Project settings → Service accounts → Generate new private key** → a `.json` file downloads.
+Treat it like a password: never put it in GitHub or send it in chat.
+
+## 3. Secrets in Cloudflare
+Cloudflare → **Workers & Pages → nainezz-shop → Settings → Variables and secrets → Add**. Type **Secret** for each:
+
+| Name | Value |
+|---|---|
+| `MPESA_CONSUMER_KEY` | Consumer Key from step 1 |
+| `MPESA_CONSUMER_SECRET` | Consumer Secret from step 1 |
+| `MPESA_PASSKEY` | Passkey from step 1 |
+| `MPESA_CALLBACK_KEY` | Any long random text you make up (e.g. 40 random letters and numbers) |
+| `FIREBASE_SERVICE_ACCOUNT` | Open the `.json` file from step 2 in Notepad, copy **everything**, paste |
+
+Optional plain-text variables (defaults are for the sandbox): `MPESA_ENV` (`sandbox`/`production`), `MPESA_SHORTCODE` (default `174379`),
+`MPESA_TYPE` (`paybill`/`till`), `MPESA_PARTYB` (till number, for a till).
+
+Then **Deployments → ⋯ on the latest → Retry deployment** (secrets apply from the next deployment).
+
+## 4. Test (sandbox)
+Add something to the cart → **Pay now with M-Pesa** → use the sandbox test phone number shown in the Daraja portal.
+The order appears in the admin page as *Awaiting payment*, then *Paid* with a receipt number.
+
+## 5. Go live
+Daraja portal → **Go Live** with your paybill or till (you need the business's M-Pesa admin details). Safaricom gives you live keys and passkey. Then in Cloudflare:
+- update `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`, `MPESA_PASSKEY`
+- set `MPESA_ENV` = `production`, `MPESA_SHORTCODE` = your paybill (or store number); for a till also `MPESA_TYPE` = `till` and `MPESA_PARTYB` = till number
+- retry the deployment.
+
+## How payments are kept safe
+- Prices and stock come from Firebase on the server; whatever the browser sends is ignored.
+- Every payment is confirmed with Safaricom (STK query) and the amount compared before an order becomes **Paid**.
+- The callback address carries the secret `MPESA_CALLBACK_KEY`; other calls are refused.
+- Only the shop's own pages can start orders; max 5 orders per phone number in 10 minutes.
+- Paid → stock goes down in the same write; a repeated callback can't take stock twice.
+- Customers can only see their own order (secret token per order).
+
+---
+
+# Alternative: M-Pesa with Firebase Cloud Functions (paid Blaze plan)
+
+The same features also exist as Firebase Cloud Functions in `firebase-functions/` (use one or the other, not both).
+Deploy them, then set `payments: true` in `assets/firebase-config.js`.
 
 ## 1. Create the Firebase project
 1. Go to <https://console.firebase.google.com> → **Add project** → name it e.g. `nainezz-shop` (Google Analytics: optional).
@@ -65,7 +124,7 @@ npm install -g firebase-tools
 firebase login
 cd nainezz-shop
 firebase use --add            # pick your project, alias "default"
-cd functions && npm install && cd ..
+cd firebase-functions && npm install && cd ..
 ```
 Set the M-Pesa secrets (start with the **sandbox** keys from step 5):
 ```bash
@@ -92,7 +151,7 @@ firebase deploy --only firestore,storage,functions
 3. Test on the site with the M-Pesa option and a sandbox test phone number. The order should turn **Paid** in the admin page.
 4. **Going live**: apply for *Lipa Na M-Pesa Online* on your paybill/till through the Daraja portal ("Go Live"). Safaricom gives you live keys and a passkey. Then:
    - set the live secrets again with `firebase functions:secrets:set …`
-   - in `functions/.env` set `MPESA_ENV=production`, `MPESA_SHORTCODE=` your paybill (or store number), and for a till `MPESA_TYPE=till` + `MPESA_PARTYB=` your till number
+   - in `firebase-functions/.env` set `MPESA_ENV=production`, `MPESA_SHORTCODE=` your paybill (or store number), and for a till `MPESA_TYPE=till` + `MPESA_PARTYB=` your till number
    - `firebase deploy --only functions`
 
 ## 6. Publishing the website

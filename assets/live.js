@@ -95,15 +95,34 @@ function orderRef() {
   return Array.from(r, x => abc[x % abc.length]).join('');
 }
 function setupDirectCheckout(form) {
-  const btn = $('#checkoutBtn'), err = $('#checkoutErr');
+  const btn = $('#checkoutBtn'), err = $('#checkoutErr'), choice = $('#payChoice'), label = $('#checkoutLabel');
+  const api = (body.dataset.root || '') + 'api/';
+
+  // M-Pesa runs on Cloudflare (/api). Show the choice only when the server says it's switched on.
+  fetch(api + 'health', { cache: 'no-store' }).then(r => (r.ok ? r.json() : {})).then(h => {
+    if (!h || h.mpesa !== true) return;
+    choice.hidden = false;
+    const sync = () => {
+      const mp = (form.querySelector('input[name=pay]:checked') || {}).value === 'mpesa';
+      label.textContent = mp ? 'Pay with M-Pesa' : 'Send order on WhatsApp';
+      btn.classList.toggle('mp', mp);
+    };
+    $$('input[name=pay]', form).forEach(r => r.addEventListener('change', sync));
+    sync();
+  }).catch(() => {});
+
   window.NZ_CHECKOUT = async d => {
     err.hidden = true;
     const phone = d.phone.replace(/[\s-]/g, '');
     if (!/^(?:\+?254|0)?[17]\d{8}$/.test(phone)) {
-      err.textContent = 'Add your phone number so we can confirm the order, e.g. 0712 345 678.'; err.hidden = false;
-      form.elements.phone.focus(); return;
+      err.textContent = d.pay === 'mpesa' && !choice.hidden
+        ? 'Enter the M-Pesa phone number to pay with, e.g. 0712 345 678.'
+        : 'Add your phone number so we can confirm the order, e.g. 0712 345 678.';
+      err.hidden = false; form.elements.phone.focus(); return;
     }
     btn.disabled = true;
+    if (d.pay === 'mpesa' && !choice.hidden) return mpesaCheckout(d, api, btn);
+
     statusBox('Placing your order…');
     const ref = orderRef();
     const items = d.items.slice(0, 20).map(x => ({ slug: String(x.slug).slice(0, 80), name: String(x.name).slice(0, 120),
@@ -127,6 +146,56 @@ function setupDirectCheckout(form) {
     const box = statusBox(`Order #${ref} received — total ${ksh(total)}. Send it to us on WhatsApp and we’ll confirm the price and delivery.`, 'good');
     waButton(box, 'Send order on WhatsApp', `Order #${ref}\n` + d.msg);
   };
+}
+
+async function postJson(url, data) {
+  const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data), cache: 'no-store' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Something went wrong.');
+  return j;
+}
+
+async function mpesaCheckout(d, api, btn) {
+  statusBox('Sending the M-Pesa request to your phone…', 'wait');
+  let r;
+  try {
+    r = await postJson(api + 'order', {
+      items: d.items.map(x => ({ slug: x.slug, variant: x.variant, qty: x.qty, name: x.name })),
+      name: d.name, phone: d.phone, area: d.area, notes: d.notes
+    });
+  } catch (e) {
+    const box = statusBox(e.message + ' You can still order on WhatsApp and pay on delivery.', 'bad');
+    waButton(box, 'Order on WhatsApp instead', d.msg);
+    btn.disabled = false;
+    return;
+  }
+  const msg = `Order #${r.ref}\n` + d.msg;
+  statusBox(`Order #${r.ref}: check your phone and enter your M-Pesa PIN to pay ${ksh(r.total)}.`, 'wait');
+  const started = Date.now();
+  const tick = async () => {
+    let s;
+    try { s = await postJson(api + 'order-status', { id: r.id, token: r.token }); } catch (e) { s = { status: 'awaiting_payment' }; }
+    if (s.status === 'paid' || s.status === 'delivered') {
+      NZ().clearCart();
+      const box = statusBox(`Paid — thank you!${s.receipt ? ' M-Pesa receipt ' + s.receipt + '.' : ''} Order #${r.ref} is confirmed; we’ll call you about delivery.`, 'good');
+      waButton(box, 'Message us about delivery', msg + `\nPaid by M-Pesa ${s.receipt || ''}`);
+      return;
+    }
+    if (s.status === 'payment_failed' || s.status === 'cancelled') {
+      const box = statusBox(`The payment didn’t go through${s.reason ? ' (' + s.reason + ')' : ''}. You can try again, or order on WhatsApp and pay on delivery.`, 'bad');
+      waButton(box, 'Order on WhatsApp instead', msg);
+      btn.disabled = false;
+      return;
+    }
+    if (Date.now() - started > 150000) {
+      const box = statusBox(`Still waiting for the M-Pesa payment for order #${r.ref}. If you paid, we’ll confirm on WhatsApp.`, 'wait');
+      waButton(box, 'Message us on WhatsApp', msg);
+      btn.disabled = false;
+      return;
+    }
+    setTimeout(tick, 4000);
+  };
+  setTimeout(tick, 6000);
 }
 
 function setupCheckout() {
