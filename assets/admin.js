@@ -39,6 +39,13 @@ async function init() {
     catch (ex) { err.textContent = /invalid|wrong|not-found|credential/.test(ex.code || '') ? 'Wrong email or password.' : 'Could not sign in: ' + (ex.code || ex.message); err.hidden = false; }
   });
   $('#logout').onclick = () => A.signOut(auth);
+  $('#forgot').onclick = async () => {
+    const email = $('#login').elements.email.value.trim(), msg = $('#forgotMsg');
+    msg.hidden = false;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'Type your email in the Email box first, then tap “Forgot password?” again.'; return; }
+    try { await A.sendPasswordResetEmail(auth, email); } catch (e) { /* same answer either way, so nobody can test which emails exist */ }
+    msg.textContent = `If ${email} is an admin account, a reset link is on its way. Check your inbox and spam folder.`;
+  };
   $('#copyUid').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('#uid').textContent).then(() => toast('Copied'), () => {});
   A.onAuthStateChanged(auth, async u => {
     unsub.forEach(f => f()); unsub = [];
