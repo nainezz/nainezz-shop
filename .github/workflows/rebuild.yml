@@ -1,0 +1,26 @@
+# Asks Cloudflare Pages to rebuild the site, so products added in the admin page get their own pages.
+# Runs every 6 hours, or by hand: GitHub → Actions → "Rebuild site" → Run workflow.
+# (Every push to main also rebuilds the site on Cloudflare by itself.)
+# Needs the repository secret CF_DEPLOY_HOOK: Cloudflare → Workers & Pages → nainezz-shop → Settings →
+# Builds → Deploy hooks → Add (name "rebuild", branch main) → copy the URL into
+# GitHub → Settings → Secrets and variables → Actions → New repository secret.
+name: Rebuild site
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask Cloudflare Pages to rebuild
+        env:
+          HOOK: ${{ secrets.CF_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "::error::Add the CF_DEPLOY_HOOK secret first (see the top of this file)"; exit 1; fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Rebuild started on Cloudflare - the site updates in about a minute."
