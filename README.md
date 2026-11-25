@@ -41,4 +41,4 @@ Orders, M-Pesa payments, live stock and the admin page (`/admin.html`) run on Fi
 - Turn on **Enforce HTTPS** in GitHub Pages once the domain is connected.
 
 ## Hosting
-GitHub Pages: Settings → Pages → Source: **GitHub Actions** (uses `.github/workflows/deploy.yml`, which also pulls products from Firebase). When you connect nainezz.co.ke, enter it under Custom domain (GitHub adds a `CNAME` file).
+**Cloudflare Pages** (free, allows business sites): build command `python3 build.py --from-firebase --out _site`, output `_site`, env `PYTHON_VERSION=3.12`. Every push to `main` rebuilds; `.github/workflows/rebuild.yml` also rebuilds every 6 hours through a deploy hook so products added in the admin page get their own pages.

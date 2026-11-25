@@ -22,7 +22,7 @@ server-side price checks and photo uploads. Steps are under *Later: M-Pesa* belo
 4. **Make yourself admin**: open `/admin.html` on your site, sign in. It shows *“This account isn’t an admin”* and your user ID.
    Firestore → **Start collection** `admins` → Document ID = your user ID → add a field `name` = your name → Save. Reload.
 5. **Load products**: admin page → Products & stock → **Import from products.json** (tap twice). Then fill in **Shop details**.
-6. **Publish**: GitHub repo → Settings → Pages → Source: **GitHub Actions**.
+6. **Publish**: the site is hosted on **Cloudflare Pages** (`nainezz-shop.pages.dev`), built from this repo on every push. For the 6-hourly rebuild, add a Cloudflare deploy hook as the `CF_DEPLOY_HOOK` secret (see `.github/workflows/rebuild.yml`).
 
 ### Free plan: what to know
 - Customers' browsers write orders directly, so the rules only accept a new order in the exact expected shape
@@ -38,7 +38,7 @@ server-side price checks and photo uploads. Steps are under *Later: M-Pesa* belo
 | `functions/index.js` | Server code: `createOrder`, `orderStatus`, `mpesaCallback`, `syncStock` |
 | `functions/.env` | M-Pesa settings (sandbox or live, paybill or till) |
 | `firestore.rules`, `storage.rules` | Who may read/write what — the main security layer |
-| `.github/workflows/deploy.yml` | Rebuilds and publishes the site (on every push and every 6 hours) |
+| `.github/workflows/rebuild.yml` | Asks Cloudflare to rebuild the site every 6 hours (or on demand) |
 
 # Later: M-Pesa (paid Blaze plan)
 
